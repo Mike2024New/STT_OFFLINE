@@ -69,13 +69,31 @@ sudo apt install libportaudio2 portaudio19-dev libasound-dev -y
 2. Посмотреть docs и дергать api ручки можно из: [http://localhost:8000/docs/](http://localhost:8000/docs/)
 3. Посмотреть доступные модели и голоса [http://localhost:8000/tts/info/](http://localhost:8000/tts/info/)
 4. Запуск приложения (движка распознавания речи), в engine укажите доступный движок например `vosk`:
-    - vosk: [http://localhost:8000/start/?engine=vosk&model=vosk-model-small-ru-0.22](http://localhost:8000/start/?engine=vosk&model=vosk-model-small-ru-0.22)
-    - whisper : [http://localhost:8000/start/?engine=whisper&model=medium](http://localhost:8000/start/?engine=whisper&model=medium)
+    -
+    vosk: [http://localhost:8000/start/?engine=vosk&model=vosk-model-small-ru-0.22](http://localhost:8000/start/?engine=vosk&model=vosk-model-small-ru-0.22)
+    -
+    whisper : [http://localhost:8000/start/?engine=whisper&model=medium](http://localhost:8000/start/?engine=whisper&model=medium)
 5. Снять распознанный из речи текст можно здесь: [http://localhost:8000/messages/](http://localhost:8000/messages/) -
    возвращает все сообщения сигналы приложения, в том числе result с текстом (можно делать поллинг из других
    приложений).
 6. Остановка приложения (движка распознавания речи): [http://localhost:8000/stop/](http://localhost:8000/stop/)
 7. Остановка сервера [http://localhost:8000/shutdown/](http://localhost:8000/shutdown/)
+
+## 💿Релиз
+
+Для запуска приложения без исходного кода, предусмотрен бинарный .exe файл [Скачать последнюю версию для windows](https://github.com/Mike2024New/STT_OFFLINE/releases/latest) , для
+linux можно создать бинарный файл самостоятельно из исходного кода командой python builder.py.
+
+### Работа с бинарником:
+
+Скачай файл распакуй перейди в эту директорию из cmd и выполни:
+
+Скачай ZIP-архив из релиза и распакуй его в любую папку
+Открой командную строку (cmd) в этой папке
+Посмотреть доступные команды stt (для бинарника linux ./stt).
+Запустить приложение в интерактивном режиме stt run (для бинартника linux ./stt run).
+Поднять сервер stt run-server -p 8000 (для бинарника linux ./stt run-server -p 8000), ** проверить что порт 8000
+свободный или выбрать другой. **.
 
 ## 📜Лицензии
 
