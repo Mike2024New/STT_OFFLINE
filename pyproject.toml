@@ -1,0 +1,21 @@
+# чтобы подтягивались библиотеки без конфликта с windows, ставить флаг --active
+# uv sync --active
+[project]
+name = "STT"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ctranslate2>=4.7.1",
+    "fastapi>=0.136.1",
+    "faster-whisper>=1.2.1",
+    "numpy>=2.4.4",
+    "pyinstaller>=6.20.0",
+    "python-dotenv>=1.2.2",
+    "rich>=15.0.0",
+    "sounddevice>=0.5.5",
+    "typer>=0.25.1",
+    "uvicorn>=0.46.0",
+    "vosk>=0.3.45",
+]

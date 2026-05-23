@@ -1,0 +1,27 @@
+{
+  "stt": {
+    "pre_buffer_max_len": 30,
+    "whisper_model": "medium",
+    "whisper_translate_eng": false,
+    "whisper_vad": {
+      "threshold": 0.5,
+      "min_speech_duration_ms": 250,
+      "min_silence_duration_ms": 500,
+      "speech_pad_ms": 400
+    },
+    "vosk_model": "vosk-model-small-ru-0.22",
+    "vosk_real_time_render": false
+  },
+  "audio_input": {
+    "samplerate": 16000,
+    "blocksize": 1024,
+    "channels": 1,
+    "dtype_str": "float32"
+  },
+  "vad_rough": {
+    "sensitivity": 50,
+    "zrc": 60,
+    "burst_filter": 80,
+    "silence_time": 0.8
+  }
+}

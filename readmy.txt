@@ -1,0 +1,3 @@
+В windows нужно установить 'Microsoft Visual C++ 2016'
+В linux ubuntu, установить аудиобиблиотеки:
+    sudo apt install libportaudio2 portaudio19-dev libasound-dev -y
