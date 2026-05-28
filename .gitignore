@@ -31,6 +31,7 @@ secrets/
 *.pem
 # мои заметки
 todo.txt
+history.txt
 helper*.py
 
 # Системные файлы Windows

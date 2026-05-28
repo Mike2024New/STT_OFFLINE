@@ -2,7 +2,7 @@ from time import sleep
 import threading
 from app import message_bus
 from app.main import app as component
-from app.stt import STT_INFO
+from config.moduls import STT_INFO
 from rich import print
 
 stop_polling_message_bus = threading.Event()

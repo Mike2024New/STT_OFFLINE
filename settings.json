@@ -10,12 +10,13 @@
       "speech_pad_ms": 400
     },
     "vosk_model": "vosk-model-small-ru-0.22",
-    "vosk_real_time_render": false
+    "vosk_real_time_render": true
   },
   "audio_input": {
     "samplerate": 16000,
-    "blocksize": 1024,
+    "blocksize": 640,
     "channels": 1,
+    "aec_filter": true,
     "dtype_str": "float32"
   },
   "vad_rough": {

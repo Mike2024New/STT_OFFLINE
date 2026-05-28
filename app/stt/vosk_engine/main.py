@@ -19,9 +19,8 @@ class Stt:
 
     def _audio_callback(self, indata, _frames, _time, _status):
         self.speech_active = self._stt.speech_active  # проброс speech_active (статус речь сейчас или нет)
-        self._stt.transcribate(
-            audio=indata[:, 0].copy(),
-        )
+        if self._stt is not None:
+            self._stt.transcribate(audio=indata[:, 0].copy())
 
     def start(self, model_name: str | None = None) -> bool:  # noqa
         model_name = model_name or settings_manager.settings.stt.vosk_model
@@ -61,3 +60,4 @@ if __name__ == '__main__':
     stt = Stt(print_result_console=True)
     stt.start()
     input()
+    stt.stop()

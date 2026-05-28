@@ -2,6 +2,7 @@ import sys
 import subprocess
 import platform
 from pathlib import Path
+from config.moduls import INSTALL_DEPENDS
 
 is_windows = platform.system().lower() == 'windows'
 separator = ";" if is_windows else ":"
@@ -10,11 +11,11 @@ python_lib = f"Lib\\site-packages" if is_windows else f"lib/python{sys.version_i
 python_lib = Path('.venv') / python_lib
 
 
-def build(
-        name: str = 'component',
-        add_binary: list[str] | None = None,
-        add_data: list[Path] | None = None
-):
+def build(name: str = 'component'):
+    add_data = INSTALL_DEPENDS['add_data']
+    add_binary = INSTALL_DEPENDS['add_binary']
+    exclude_modules = INSTALL_DEPENDS['excluded']
+
     print('[green]Сборка приложения[/green]')
 
     cmd = [
@@ -22,9 +23,14 @@ def build(
         '--onefile',
         '--console',
         '--name', name,
-        '--exclude-module', Path(__file__).stem,
         '--icon=icon.ico',
+        '--exclude-module', Path(__file__).stem,
     ]
+
+    # исключаемые модули
+    if exclude_modules is not None:
+        for e in exclude_modules:
+            cmd.extend(['--exclude-module', e])
 
     # сборка бинарных файлов (.dll, библиотек)
     if add_binary is not None:
@@ -49,22 +55,5 @@ def build(
 
 
 if __name__ == '__main__':
-    from app.stt import STT_REGISTRY
-
-    # Подхватывание пакетов для сборки в .exe (например .dll для whisper)
-    # позволяет сделать например облегченную сборку которая работает только с whisper или c vosk (вкл/выкл модуль можно в app.stt.__init__)
-    add_binary_app = []
-    add_data_app = []
-    for engine in STT_REGISTRY:
-        binary_app = STT_REGISTRY[engine]['add_binary']
-        data_app = STT_REGISTRY[engine]['add_data']
-        if binary_app:
-            add_binary_app.append(*binary_app)
-        if data_app:
-            add_data_app.append(*data_app)
-
-    build(
-        name='stt',
-        add_binary=add_binary_app,
-        add_data=add_data_app,
-    )
+    # теперь дополнительные материалы подхватываются из конфигурации. Лишнее больше не ставится.
+    build(name='STT')

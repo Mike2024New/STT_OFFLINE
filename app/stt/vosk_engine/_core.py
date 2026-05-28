@@ -46,6 +46,10 @@ class SttCore:
         )
 
     def transcribate(self, audio):
+        # для безопасного выхода из приложения
+        if not hasattr(self, 'recoginizer'):
+            return
+
         render_mode = settings_manager.settings.stt.vosk_real_time_render
         if audio.dtype != np.int16:
             audio_int16 = (audio * 32767).astype(np.int16)

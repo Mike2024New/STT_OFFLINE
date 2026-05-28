@@ -1,10 +1,11 @@
-from fastapi import FastAPI, status
+from fastapi import FastAPI, status, Request
 from app import message_bus
 from app.main import app as component
 from utils.message_bus_manager.message_bus_manager import Message
 from app.routers import router
 from app import settings_manager, Settings
 from server._server import Server
+from config.moduls import STT_INFO
 
 app = FastAPI()
 app.include_router(router)
@@ -23,6 +24,22 @@ def component_status():
         'msg': 'Состояние компонента',
         'is_running': component.is_running,
     }
+
+
+@app.get('/info/')
+def info(request: Request):
+    info_data = {}
+    port = request.url.port
+    for engine in STT_INFO:
+        info_data[engine] = {}
+        for model in STT_INFO[engine]:
+            info_data[engine][model] = {
+                'urls': [],
+            }
+            url = f'http://localhost:{port}/start/?engine={engine}&model={model}'
+            info_data[engine][model]['urls'].append(url)
+
+    return {'info': info_data}
 
 
 @app.get(

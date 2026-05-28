@@ -1,15 +1,24 @@
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 import numpy as np
 
 __all__ = ['settings', 'table_change_events', 'reboot_fileds', 'Settings']
 
 
 class AudioInput(BaseModel):
+    model_config = {'validate_default': True}
     samplerate: int = 16000
-    blocksize: int = 1024
+    blocksize: int = Field(default=640, ge=320, le=16000)
     channels: int = 1
+    aec_filter: bool = True
     dtype_str: Literal['float32', 'int16', 'float64'] = 'float32'
+
+    @field_validator('blocksize')  # noqa
+    @classmethod
+    def round_to_160(cls, v: int) -> int:
+        """Округляет до ближайшего кратного 160."""
+        result = 160 * round(v / 160)
+        return max(result, 160)
 
     @property
     def dtype(self):
@@ -87,4 +96,5 @@ settings = Settings(audio_input=AudioInput(), vad_rough=VadRough(), stt=Stt(whis
 
 #
 if __name__ == '__main__':
-    print(settings.stt.whisper_vad.model_dump())
+    # print(settings.stt.whisper_vad.model_dump())
+    print(settings.audio_input.blocksize)

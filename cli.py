@@ -72,8 +72,12 @@ def run_server(
         --port или -p номер порта на котором будет запущено приложение
     """
     from server import server
-    url = f'http://localhost:{port}/docs/'
-    print(f'🟢 Сервер запущен url: `{url}`')
+    url_docs = f'http://localhost:{port}/docs/'
+    url_info = f'http://localhost:{port}/info/'
+    url_shutdown = f'http://localhost:{port}/shutdown/'
+    print(f'🟢 Сервер загружен url: `{url_docs}`')
+    print(f'Информация по моделям: `{url_info}`')
+    print(f'Остановка сервера `{url_shutdown}`')
 
     try:
         server.start(port=port)
@@ -83,7 +87,7 @@ def run_server(
     finally:
         component.stop()
         server.stop()
-        print(f'🔴 Сервер завершил работу. url: `{url}`')
+        print(f'🔴 Сервер завершил работу.')
 
 
 if __name__ == '__main__':

@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 from utils.message_bus_manager.message_bus_manager import MessageBus, Message
 from utils.settings_manager import get_settings_manager
-from app.schemas import settings, table_change_events, reboot_fileds, Settings
+from config.schemas import settings, reboot_fileds, Settings
 
 __all__ = [
     'settings_manager', 'Settings',

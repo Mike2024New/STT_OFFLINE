@@ -1,7 +1,7 @@
 import threading
 from app import COMPONENT_NAME, message_bus, Message
 from app._protocol import AppProtocol
-from app.stt import STT_REGISTRY
+from config.moduls import STT_REGISTRY
 from app.stt.stt_engine_protocol import STTEngine
 
 __all__ = ['app']
@@ -45,7 +45,8 @@ app = App()
 if __name__ == '__main__':
     app.name = 'app'
     try:
-        app.start(engine='whisper', model='medium', print_result_console=True)
+        app.start(engine='vosk', model='vosk-model-small-ru-0.22', print_result_console=True)
+        # app.start(engine='whisper', model='large-v3', print_result_console=True)
         input()
         app.stop()
     except KeyboardInterrupt:
