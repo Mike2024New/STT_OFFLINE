@@ -1,8 +1,7 @@
 import atexit
-from app import message_bus, Message, COMPONENT_NAME, settings_manager
+from app import message_bus, Message, ComponentMetadata, settings_manager
 from app.stt.vosk_engine._core import SttCore
 from app.stt._audio_input import AudioInput
-from app.stt._vad_rough import VadRough
 from app.stt.vosk_engine import SUBCOMPONENT_NAME
 
 __all__ = ['Stt', ]
@@ -12,7 +11,6 @@ class Stt:
     def __init__(self, print_result_console: bool = False):
         self._audio_input: AudioInput = AudioInput()
         self._stt = SttCore(print_result_console=print_result_console)
-        self._vads = []
         self._print_result_console = print_result_console
         self.speech_active = False
         atexit.register(self.stop)
@@ -22,38 +20,35 @@ class Stt:
         if self._stt is not None:
             self._stt.transcribate(audio=indata[:, 0].copy())
 
-    def start(self, model_name: str | None = None) -> bool:  # noqa
+    def start(self, model_name: str | None = None) -> None:  # noqa
         model_name = model_name or settings_manager.settings.stt.vosk_model
         try:
             self._stt.start(model_name=model_name)
-            self._vads.append(VadRough())
-            for vad in self._vads:
-                vad.start()  # запуск каждого vad
             # слушатель аудио подключается в последнюю очередь (из за callback)
             self._audio_input.start(callback=self._audio_callback)
         except Exception as err:
             message_bus.add(
                 Message(
-                    component=COMPONENT_NAME,
+                    component_id=ComponentMetadata.ID,
+                    component=ComponentMetadata.NAME,
                     subcomponent=SUBCOMPONENT_NAME,
                     level='error',
-                    message=f'vosk_stt не удалось запустить. {err}'
+                    event=f'{SUBCOMPONENT_NAME} is not runned',
+                    message=f'{SUBCOMPONENT_NAME} не удалось запустить.',
+                    error=err,
                 )
             )
-            return False
-        return True
+            raise RuntimeError(f'{SUBCOMPONENT_NAME} не удалось запустить. Причина: {err}')
 
     def stop(self):
         # порядок отключения важен!
         if self._audio_input is not None:
             self._audio_input.stop()
+            self._audio_input = None
 
-        if self._stt:
+        if self._stt is not None:
             self._stt.stop()
-
-        for vad in self._vads:
-            if vad is not None:
-                vad.stop()
+            self._stt = None
 
 
 if __name__ == '__main__':

@@ -2,12 +2,15 @@ import threading
 from typing import Callable
 import queue
 import platform
-
+import warnings
 import numpy as np
 import soundcard as sc
 from aec_audio_processing import AudioProcessor
 
-from app import COMPONENT_NAME, settings_manager, message_bus, Message
+from app import ComponentMetadata, settings_manager, message_bus, Message
+
+# небольшие единичные пропуски для распознвания не критичны
+warnings.filterwarnings('ignore', message='data discontinuity')
 
 SUB_COMPONENT_NAME = 'audio_input'
 
@@ -17,8 +20,8 @@ SYSTEM = platform.system()
 class AudioInput:
     def __init__(self):
         self.running = False  # защита от повторного запуска
-        self._mic_queue = queue.Queue(maxsize=100)
-        self._sys_queue = queue.Queue(maxsize=100)
+        self._mic_queue = queue.Queue(maxsize=200)
+        self._sys_queue = queue.Queue(maxsize=200)
         self._enable_aec_filter = True
         self._component_stop = threading.Event()  # остановка приложения
         self._samplerate = 16000
@@ -125,18 +128,24 @@ class AudioInput:
             audio_output = self._get_looback_speaker()
 
             if self._enable_aec_filter:
-                self._aec = AudioProcessor(enable_aec=True, enable_ns=True, enable_agc=True)
-                self._aec.set_stream_format(self._samplerate, 1)
-                self._aec.set_reverse_stream_format(self._samplerate, 1)  # ← ключевая строка!
-                self._aec_frame_size = self._aec.get_frame_size()  # 160
-                message_bus.add(
-                    Message(
-                        component=COMPONENT_NAME,
-                        level='info',
-                        message=f'AEC фильтр (вычитание сигнала выходящего с колонок) подключен.',
-                        subcomponent=SUB_COMPONENT_NAME,
+                try:
+                    self._aec = AudioProcessor(enable_aec=True, enable_ns=True, enable_agc=True)
+                    self._aec.set_stream_format(self._samplerate, 1)
+                    self._aec.set_reverse_stream_format(self._samplerate, 1)  # ← ключевая строка!
+                    self._aec_frame_size = self._aec.get_frame_size()  # 160
+                except Exception as err:
+                    self._aec = None
+                    self._enable_aec_filter = False
+                    message_bus.add(
+                        Message(
+                            component_id=ComponentMetadata.ID,
+                            component=ComponentMetadata.NAME,
+                            subcomponent=SUB_COMPONENT_NAME,
+                            level='error',
+                            message=f'Не удалось подключить AEC.',
+                            error=err,
+                        )
                     )
-                )
 
             threading.Thread(target=self._mic_worker, kwargs={'audio_input': audio_input}).start()
             threading.Thread(target=self._sys_worker, kwargs={'audio_output': audio_output}).start()
@@ -148,15 +157,18 @@ class AudioInput:
             polling_time = self._blocksize / self._samplerate
             message_bus.add(
                 Message(
-                    component=COMPONENT_NAME,
-                    level='info',
-                    message=f'модуль подключен.\n'
-                            f'samplerate: {self._samplerate}\n'
-                            f'samplerate: {self._blocksize}\n'
-                            f'audio input device: {audio_input.name}\n'
-                            f'audio output device: {audio_output.name}\n'
-                            f'Опрос микрофона раз в {polling_time} секунд.',
+                    component_id=ComponentMetadata.ID,
+                    component=ComponentMetadata.NAME,
                     subcomponent=SUB_COMPONENT_NAME,
+                    level='start',
+                    data={
+                        'samplerate': self._samplerate,
+                        'blocksize': self._blocksize,
+                        'audio_input_device': audio_input.name,
+                        'audio_output_device': audio_output.name,
+                        'microphone_polling_interval_sec': polling_time,
+                        'AEC_filter_enabled': self._enable_aec_filter,
+                    }
                 )
             )
 
@@ -169,10 +181,10 @@ class AudioInput:
             self.running = False
             message_bus.add(
                 Message(
-                    component=COMPONENT_NAME,
-                    level='info',
-                    message=f'микрофон остановлен',
+                    component_id=ComponentMetadata.ID,
+                    component=ComponentMetadata.NAME,
                     subcomponent=SUB_COMPONENT_NAME,
+                    level='stop',
                 )
             )
 

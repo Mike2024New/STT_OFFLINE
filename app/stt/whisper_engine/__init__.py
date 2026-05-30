@@ -3,9 +3,11 @@ SUBCOMPONENT_NAME = 'whisper_engine'
 from app import MODELS_DIR
 
 WHISPER_MODELS_DIR = MODELS_DIR / 'whisper'
+VOSK_MODELS_DIR_FOR_VAD = MODELS_DIR / 'vosk'  # vosk используется как vad
 
 # создание необходимых папок
 WHISPER_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+VOSK_MODELS_DIR_FOR_VAD.mkdir(parents=True, exist_ok=True)
 
 # получение списка моделей
 WHISPER_MODELS_LIST = []

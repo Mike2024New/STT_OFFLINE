@@ -6,7 +6,8 @@ from rich import print
 from rich.prompt import Prompt
 import platform
 from app.main import app as component
-from app import settings_manager
+from app import settings_manager, Settings
+from typing import Literal
 
 COMPONENT = 'CLI'
 SUBCOMPONENT_NAME = 'CLI'
@@ -30,6 +31,12 @@ def run():
 
     from cli_addon import interactive
     interactive()
+
+
+@app.command()
+def settings_schema():
+    """Просмотреть схему настроек с описанием параметров [yellow]settings_schema[/yellow]"""
+    print(Settings.model_json_schema())
 
 
 @app.command()
@@ -64,30 +71,30 @@ def settings_reset():
 
 @app.command()
 def run_server(
-        port: int = typer.Option(8000, '--port', '-p')
+        port: int = typer.Option(8000, '--port', '-p'),
+        log_level: Literal['debug', 'info', 'warning', 'error'] = typer.Option('warning', '--log-level', '-ll')
 ):
     """
     Запуск сервера для работы с api приложения. [yellow]run-server[/yellow]
     Опции:
         --port или -p номер порта на котором будет запущено приложение
+        --log-level или -ll уровень логов сервера выбрать из ['debug', 'info', 'warning', 'error'] по умолчанию 'warning'
     """
     from server import server
     url_docs = f'http://localhost:{port}/docs/'
     url_info = f'http://localhost:{port}/info/'
     url_shutdown = f'http://localhost:{port}/shutdown/'
-    print(f'🟢 Сервер загружен url: `{url_docs}`')
+    print(f'Сервер загружен url: `{url_docs}`')
     print(f'Информация по моделям: `{url_info}`')
     print(f'Остановка сервера `{url_shutdown}`')
 
     try:
-        server.start(port=port)
+        server.start(port=port, log_level=log_level)
     except KeyboardInterrupt:
         component.stop()
-        server.stop()
     finally:
-        component.stop()
         server.stop()
-        print(f'🔴 Сервер завершил работу.')
+        print(f'Сервер завершил работу.')
 
 
 if __name__ == '__main__':

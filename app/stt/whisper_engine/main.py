@@ -4,10 +4,11 @@ from collections import deque
 import numpy as np
 import atexit
 from app.stt._audio_input import AudioInput
-from app.stt._vad_rough import VadRough
+from app.stt.vad.vad_vosk import VadVosk
 from app.stt.whisper_engine._core import SttCore
-from app import settings_manager, message_bus, Message, COMPONENT_NAME
+from app import settings_manager, message_bus, Message, ComponentMetadata
 from app.stt.whisper_engine import SUBCOMPONENT_NAME, WHISPER_MODELS_LIST
+from time import monotonic
 
 __all__ = ['Stt', ]
 
@@ -18,7 +19,7 @@ class Stt:
         self._vads = []
         self._stt: SttCore | None = None
         # предбуфер который обновляется каждые maxlen чанков
-        self._pre_buffer = deque(maxlen=settings_manager.settings.stt.pre_buffer_max_len)
+        self._pre_buffer = deque(maxlen=settings_manager.settings.stt.whisperOther.whisper_pre_buffer_max_len)
         self._speech_buffer = []  # буфер для накопления фраз
         self.speech_active = False
         self._silence_counter = 0
@@ -26,6 +27,10 @@ class Stt:
         self._stt_queue = queue.Queue()  # очередь аудиобуферов
         self._stt_thread = threading.Thread(target=self._stt_worker, daemon=True)
         self._print_result_console = print_result_console
+
+        self._start_time_speech = None
+        self._end_time_speech = None
+        self.start_speech = False
 
         atexit.register(self.stop)
 
@@ -35,21 +40,45 @@ class Stt:
             full_audio = self._stt_queue.get()  # ждёт буфер
             if full_audio is None:  # стоп-сигнал
                 break
+
+            self._end_time_speech = monotonic()
+            message_bus.add(
+                Message(
+                    component_id=ComponentMetadata.ID,
+                    component=ComponentMetadata.NAME,
+                    subcomponent=SUBCOMPONENT_NAME,
+                    level='process',
+                    message=f'Закончили говорить.',
+                    event='speech_ended',
+                    data={
+                        'current_timestamp': round(monotonic() - self._start_time_speech, 2),
+                        'recognized_time': None,
+                    }
+                )
+            )
+
             text = self._stt.transcribe(audio=full_audio)
             if text:
                 # на прямую печать результата в консоль (для cli.py и промежуточных запусков модулей)
                 if self._print_result_console:
                     print(text)
+                current_time_metric = round(monotonic() - self._start_time_speech, 2)
+                recognized_time = round(monotonic() - self._end_time_speech, 2)
                 message_bus.add(
                     Message(
-                        component=COMPONENT_NAME,
+                        component_id=ComponentMetadata.ID,
+                        component=ComponentMetadata.NAME,
                         subcomponent=SUBCOMPONENT_NAME,
-                        level='info',
-                        message=f'Распознаный текст.',
+                        level='process',
+                        message='Получен распознанный текст.',
+                        event='text_recognized',
                         result={
                             'text': text,
-                            'model': settings_manager.settings.stt.whisper_model,
                         },
+                        data={
+                            'current_timestamp': current_time_metric,
+                            'recognized_time': recognized_time,
+                        }
                     )
                 )
 
@@ -58,9 +87,40 @@ class Stt:
         self._pre_buffer.append(pcm)
         chunk_is_speech = all(vad.process(pcm) for vad in self._vads)
 
+        # проверка через RMS фильтр, так как vosk VAD уходит в Recoginizer и это дает временную задержку
+        # RMS видит тишину и дает отсечку не дожидаясь Recoginizer
         if chunk_is_speech:
-            # если речь в текущем моменте
+            if not self.start_speech:
+                self.start_speech = True
+                chunk_is_speech = True
+            else:
+                rms = np.sqrt(np.mean(pcm ** 2))
+                rms_threshold = settings_manager.settings.stt.whisperOther.whisper_rms_threshold
+                chunk_is_speech = True if rms > rms_threshold else False
+        else:
+            if self.start_speech:
+                self.start_speech = False
+                chunk_is_speech = False
+
+        if chunk_is_speech:
+            # если чанк был распознан как речь (то есть vad утверждают что сейчас говорят)
             if not self.speech_active:  # начало речи
+                message_bus.add(
+                    Message(
+                        component_id=ComponentMetadata.ID,
+                        component=ComponentMetadata.NAME,
+                        subcomponent=SUBCOMPONENT_NAME,
+                        level='process',
+                        event='speech_started',
+                        message=f'Начали говорить',
+                        data={
+                            'current_timestamp': 0.0,
+                            'recognized_time': None,
+                        }
+                    )
+                )
+
+                self._start_time_speech = monotonic()
                 self._speech_buffer = list(self._pre_buffer)  # добавление тишины (чтобы речь не была рваной)
             self.speech_active = True
             self._silence_counter = 0
@@ -71,13 +131,14 @@ class Stt:
             self._silence_counter += settings_manager.settings.audio_input.blocksize / settings_manager.settings.audio_input.samplerate
             self._speech_buffer.append(pcm)
 
-            if self._silence_counter > settings_manager.settings.vad_rough.silence_time:
+            if self._silence_counter > settings_manager.settings.stt.whisperOther.whisper_silence_time:  # вынести в конфиг
                 self.speech_active = False
+
                 post_silence = list(self._pre_buffer)[-5:]  # для 1024 ~ 300 мс
                 self._speech_buffer.extend(post_silence)  # добавление тишины в конец буфера (лучше распознается tts)
                 full_audio = np.concatenate(self._speech_buffer)
-                self._on_speech_end(
-                    full_audio=full_audio)  # отправка полученного фрагмента разговора в whisper_engine / vosk_engine
+                # отправка полученного фрагмента разговора в whisper_engine / vosk_engine
+                self._on_speech_end(full_audio=full_audio)
                 for vad in self._vads:
                     vad.reset()
                 self._speech_buffer = []  # сброс буфера
@@ -86,7 +147,7 @@ class Stt:
     def _on_speech_end(self, full_audio: np.ndarray):
         self._stt_queue.put(full_audio.copy())
 
-    def start(self, model_name: str | None = None):
+    def start(self, model_name: str | None = None) -> None:
         model_name = model_name or settings_manager.settings.stt.whisper_model
         if model_name not in WHISPER_MODELS_LIST:
             raise RuntimeError(
@@ -95,7 +156,7 @@ class Stt:
             # инициализация
             self._audio_input = AudioInput()
             # регистрация vad систем (здесь можно устанавливать множество фильтров)
-            self._vads.append(VadRough())
+            self._vads.append(VadVosk())
             # регистрация stt
             self._stt = SttCore()
             self._stt.start(model_name=model_name)
@@ -107,29 +168,35 @@ class Stt:
         except Exception as err:
             message_bus.add(
                 Message(
-                    component=COMPONENT_NAME,
+                    component_id=ComponentMetadata.ID,
+                    component=ComponentMetadata.NAME,
                     subcomponent=SUBCOMPONENT_NAME,
                     level='error',
-                    message=f'whisper не удалось запустить. Причина: {err}'
+                    event=f'{SUBCOMPONENT_NAME} is not runned',
+                    message=f'{SUBCOMPONENT_NAME} не удалось запустить.',
+                    error=err,
                 )
             )
-            raise RuntimeError(f'whisper не удалось запустить. Причина: {err}')
+            raise RuntimeError(f'{SUBCOMPONENT_NAME} не удалось запустить. Причина: {err}')
 
     def stop(self):
         # порядок отключения важен!
         if self._audio_input is not None:
             self._audio_input.stop()
 
-        if self._stt:
+        if self._stt is not None:
             self._stt.stop()
+            self._stt = None
 
-        for vad in self._vads:
-            if vad is not None:
-                vad.stop()
+        if self._vads:
+            for vad in self._vads:
+                if vad is not None:
+                    vad.stop()
+            self._vads = []
 
 
 if __name__ == '__main__':
     stt = Stt(print_result_console=True)
-    stt.start(model_name='medium')
+    stt.start(model_name='large-v3')
     input()
     stt.stop()

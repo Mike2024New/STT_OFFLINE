@@ -22,15 +22,16 @@ def add_vosk(enabled: bool = False):
         return
 
     # Если модуль не подключается, то убрать хвосты
-    INSTALL_DEPENDS['excluded'].extend([
-        'vosk',
-        'vosk_transcriber',
-        'vosk_text',
-        'kaldi_recognizer',
-        'srt',
-        'ffmpeg_python',
-        'pydub',
-    ])
+    # Не нужно теперь отключать хвосты так как vosk используется как vad для whisper
+    # INSTALL_DEPENDS['excluded'].extend([
+    #     'vosk',
+    #     'vosk_transcriber',
+    #     'vosk_text',
+    #     'kaldi_recognizer',
+    #     'srt',
+    #     'ffmpeg_python',
+    #     'pydub',
+    # ])
 
 
 def add_whisper(enabled: bool = False):

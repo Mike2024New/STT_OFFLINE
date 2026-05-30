@@ -1,9 +1,10 @@
-from fastapi import FastAPI, status, Request
+from datetime import datetime
+from fastapi import FastAPI, status, Request, APIRouter
 from app import message_bus
 from app.main import app as component
-from utils.message_bus_manager.message_bus_manager import Message
-from app.routers import router
 from app import settings_manager, Settings
+from app.routers import router
+from utils.message_bus_manager.message_bus_manager import Message
 from server._server import Server
 from config.moduls import STT_INFO
 
@@ -13,20 +14,26 @@ server = Server(application=app)
 
 __all__ = ['server']  # объект для управления сервером
 
+info_routers = APIRouter(tags=['info'])
+settings_routers = APIRouter(tags=['settings'])
+manager_routers = APIRouter(tags=['manager'])
 
-@app.get('/')
-@app.get('/status/')
+
+@info_routers.get('/')
+@info_routers.get('/health/')
+@info_routers.get('/status/')
 def component_status():
     """
-    Основная информация о состоянии компонента
+    Проверка состояния сервера. Проверка запущен ли компонент сервера (component_is_run).
     """
     return {
-        'msg': 'Состояние компонента',
-        'is_running': component.is_running,
+        'msg': 'Основная информация о сервере.',
+        'component_is_run': component.is_running,
+        'timestamp': datetime.now().isoformat(),
     }
 
 
-@app.get('/info/')
+@info_routers.get('/info/')
 def info(request: Request):
     info_data = {}
     port = request.url.port
@@ -42,29 +49,7 @@ def info(request: Request):
     return {'info': info_data}
 
 
-@app.get(
-    '/start/',
-    summary='Запуск приложения в режиме сервера',
-)
-def component_start(engine: str, model: str):
-    component.start(engine=engine, model=model, print_result_console=True)
-    return {
-        'msg': f'Компонент `{component.name}` запущен.',
-    }
-
-
-@app.get(
-    '/stop/',
-    summary='Остановка приложения в режиме сервера',
-)
-def component_stop():
-    component.stop()
-    return {
-        'msg': f'Компонент `{component.name}` остановлен.',
-    }
-
-
-@app.get(
+@info_routers.get(
     '/messages/',
     response_model=dict[str, list[Message] | str],
     status_code=status.HTTP_200_OK,
@@ -78,39 +63,30 @@ def get_messages_all():
     }
 
 
-@app.get(
-    '/settings/',
-    response_model=dict[str, Settings],
-    status_code=status.HTTP_200_OK,
-    summary='Информация о текущих настройках',
+@manager_routers.get(
+    '/start/',
+    summary='Информацию о движках и моделях можно посмотреть в `/info/`, там же можно получить url для запуска приложения',
 )
-def settings_get():
-    return {'settings': settings_manager.settings}
+def component_start(engine: str, model: str):
+    component.stop()  # идемпотентно прервать работающую модель
+    component.start(engine=engine, model=model, print_result_console=True)
+    return {
+        'msg': f'Компонент `{component.name}` запущен.',
+    }
 
 
-@app.post(
-    '/settings-edit/',
-    response_model=dict[str, Settings],
-    status_code=status.HTTP_200_OK,
-    summary='Изменение настроек',
+@manager_routers.get(
+    '/stop/',
+    summary='Остановка приложения в режиме сервера',
 )
-def settings_update(new_settings: Settings):
-    settings_manager.apply_new_settings(settings=new_settings)
-    return {'settings': settings_manager.settings}
+def component_stop():
+    component.stop()
+    return {
+        'msg': f'Компонент `{component.name}` остановлен.',
+    }
 
 
-@app.delete(
-    '/settings-edit/',
-    response_model=dict[str, Settings],
-    status_code=status.HTTP_200_OK,
-    summary='Сбросить все настройки к заводским',
-)
-def settings_reset():
-    settings_manager.reset()
-    return {'settings': settings_manager.settings}
-
-
-@app.get(
+@manager_routers.get(
     '/shutdown/',
     response_model=dict[str, str],
     status_code=status.HTTP_200_OK,
@@ -127,6 +103,48 @@ def shutdown():
         'msg': 'сервер остановлен.'
     }
 
+
+@settings_routers.get('/settings-schema/')
+def settings_schema() -> dict:
+    return Settings.model_json_schema()
+
+
+@settings_routers.get(
+    '/settings/',
+    response_model=dict[str, Settings],
+    status_code=status.HTTP_200_OK,
+    summary='Информация о текущих настройках',
+)
+def settings_get():
+    return {'settings': settings_manager.settings}
+
+
+@settings_routers.post(
+    '/settings-edit/',
+    response_model=dict[str, Settings],
+    status_code=status.HTTP_200_OK,
+    summary='Изменение настроек',
+)
+def settings_update(new_settings: Settings):
+    settings_manager.apply_new_settings(settings=new_settings)
+    return {'settings': settings_manager.settings}
+
+
+@settings_routers.delete(
+    '/settings-edit/',
+    response_model=dict[str, Settings],
+    status_code=status.HTTP_200_OK,
+    summary='Сбросить все настройки к заводским',
+)
+def settings_reset():
+    settings_manager.reset()
+    return {'settings': settings_manager.settings}
+
+
+# добавление роутеров (разделено для удобного отображения в swagger ui)
+app.include_router(info_routers)
+app.include_router(settings_routers)
+app.include_router(manager_routers)
 
 if __name__ == '__main__':
     print(f'/shutdown/ для остановки сервера')

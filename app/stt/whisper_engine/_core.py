@@ -1,15 +1,17 @@
 import ctranslate2
 import numpy as np
 from faster_whisper import WhisperModel
-from app import COMPONENT_NAME, message_bus, Message, settings_manager
+from app import ComponentMetadata, message_bus, Message, settings_manager
 from app.stt.whisper_engine import SUBCOMPONENT_NAME, WHISPER_MODELS_DIR
 
 
 class SttCore:
     def __init__(self):
         self._model = None
+        self._language = None
 
     def start(self, model_name: str = None, samplerate: int = 16000):
+        self._language = settings_manager.settings.stt.whisper_transcribe.language
         device = 'cuda' if ctranslate2.get_cuda_device_count() > 0 else 'cpu'
         compute_type = 'float16' if device == 'cuda' else 'int8'
 
@@ -23,9 +25,9 @@ class SttCore:
                 download_root=str(WHISPER_MODELS_DIR),
                 local_files_only=True,  # только локальные модели
             )
+            fact_device = device
             # проверка что загруженная модель работает корректно (иногда бывает устаревший драйвер cuda)
             self.transcribe(audio=test_audio)
-            msg = f'whisper загружен. device={device}, model={model_name}'
         except Exception:  # noqa
             try:
                 self._model = WhisperModel(
@@ -36,34 +38,57 @@ class SttCore:
                     local_files_only=True,
                 )
                 self.transcribe(audio=test_audio)
-                msg = f'whisper загружен. device=cpu, model={model_name}'
+                fact_device = 'cpu'
             # но если он не загрузится то это фатальная ошибка
             except Exception as err:  # noqa
                 raise RuntimeError(f'{err}')
 
         message_bus.add(
             Message(
-                component=COMPONENT_NAME,
+                component_id=ComponentMetadata.ID,
+                component=ComponentMetadata.NAME,
                 subcomponent=SUBCOMPONENT_NAME,
-                level='info',
-                message=msg,
+                level='start',
+                data={
+                    'device': fact_device,
+                    'model': model_name,
+                    'language': self._language if self._language is not None else 'auto',
+                    'samplerate': samplerate
+                },
             )
         )
 
     def transcribe(self, audio: np.ndarray) -> str:
         try:
-            translate_mode = 'translate' if settings_manager.settings.stt.whisper_translate_eng else 'transcribe'
+            translate_mode = 'translate' if settings_manager.settings.stt.whisperOther.whisper_translate_eng else 'transcribe'
             segments, _ = self._model.transcribe(
                 audio,
-                beam_size=5,
+                language=self._language,
+                beam_size=settings_manager.settings.stt.whisper_transcribe.beam_size,
+                best_of=settings_manager.settings.stt.whisper_transcribe.best_of,
+                patience=settings_manager.settings.stt.whisper_transcribe.patience,
+                compression_ratio_threshold=settings_manager.settings.stt.whisper_transcribe.compression_ratio_threshold,
+                temperature=settings_manager.settings.stt.whisper_transcribe.temperature,
+                without_timestamps=settings_manager.settings.stt.whisper_transcribe.without_timestamps,
                 task=translate_mode,
-                vad_filter=True,
+                vad_filter=settings_manager.settings.stt.whisper_transcribe.vad_filter,
                 vad_parameters=dict(
                     # загрузка настроек из конфигурации
                     settings_manager.settings.stt.whisper_vad
                 )
             )
         except Exception as err:
+            message_bus.add(
+                Message(
+                    component_id=ComponentMetadata.ID,
+                    component=ComponentMetadata.NAME,
+                    subcomponent=SUBCOMPONENT_NAME,
+                    level='error',
+                    message='Ошибка распознавателя текста.',
+                    event='recognized err',
+                    error=err,
+                )
+            )
             raise RuntimeError(f'Ошибка транскрибации звука в аудио: {err}')
         full_text = " ".join(segment.text for segment in segments)
         return full_text.strip()
@@ -74,10 +99,10 @@ class SttCore:
             self._model = None
         message_bus.add(
             Message(
-                component=COMPONENT_NAME,
+                component_id=ComponentMetadata.ID,
+                component=ComponentMetadata.NAME,
                 subcomponent=SUBCOMPONENT_NAME,
-                message=f'stop',
-                level='info'
+                level='stop',
             )
         )
 

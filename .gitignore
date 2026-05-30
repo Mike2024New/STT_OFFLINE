@@ -46,3 +46,9 @@ $RECYCLE.BIN/
 # Системные файлы macOS
 .DS_Store
 .AppleDouble
+
+# аккуратно, если вдруг понадобятся .exe файлы
+*.exe
+STT.spec
+
+test_phrases.md
